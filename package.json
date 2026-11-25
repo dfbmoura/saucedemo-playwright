@@ -1,19 +1,19 @@
 {
-  "name": "saucedemo-playwright",
+  "name": "saucedemo-test",
   "version": "1.0.0",
-  "description": "Desafio técnico QA Automation - fluxo de compra no SauceDemo com Playwright, POM e keywords customizadas",
+  "description": "Desafio técnico QA Automation - fluxo de compra no SauceDemo com Playwright, Page Objects e keywords customizadas",
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed",
-    "test:debug": "playwright test --debug",
-    "report": "playwright show-report reports/html",
-    "typecheck": "tsc --noEmit"
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report reports/html"
   },
   "keywords": ["playwright", "qa", "automation", "page-object-model", "saucedemo"],
-  "license": "MIT",
+  "author": "Diego Moura",
+  "license": "ISC",
+  "type": "commonjs",
   "devDependencies": {
-    "@playwright/test": "^1.49.0",
-    "@types/node": "^22.0.0",
-    "typescript": "^5.6.0"
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^26.6.7"
   }
 }

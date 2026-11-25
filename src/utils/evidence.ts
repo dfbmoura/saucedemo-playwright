@@ -1,30 +1,34 @@
 import { Page, TestInfo, test } from '@playwright/test';
 
-/** Anexa ao relatório um screenshot de página inteira com o nome informado. */
-export async function attachScreenshot(page: Page, testInfo: TestInfo, name: string): Promise<void> {
-  const body = await page.screenshot({ fullPage: true });
-  await testInfo.attach(name, { body, contentType: 'image/png' });
-}
-
 /**
- * Base das keywords customizadas: executa o corpo dentro de um test.step
- * (aparece nomeado no relatório HTML) e, ao final, anexa um screenshot como evidência.
- * Em caso de falha, também registra a evidência do momento do erro.
+ * Executa uma keyword:
+ *  - registra um passo com nome no relatório (test.step);
+ *  - anexa um screenshot ao final (evidência);
+ *  - se falhar, anexa o screenshot do momento do erro e repassa o erro.
  */
 export async function keyword<T>(
-  title: string,
+  titulo: string,
   page: Page,
   testInfo: TestInfo,
-  body: () => Promise<T>,
+  acao: () => Promise<T>,
 ): Promise<T> {
-  return test.step(title, async () => {
+  return test.step(titulo, async () => {
     try {
-      const result = await body();
-      await attachScreenshot(page, testInfo, `Evidência - ${title}`);
-      return result;
-    } catch (error) {
-      await attachScreenshot(page, testInfo, `FALHA - ${title}`).catch(() => undefined);
-      throw error;
+      const resultado = await acao();
+      await anexarPrint(page, testInfo, `Evidência - ${titulo}`);
+      return resultado;
+    } catch (erro) {
+      await anexarPrint(page, testInfo, `FALHA - ${titulo}`);
+      throw erro;
     }
   }, { box: true });
+}
+
+async function anexarPrint(page: Page, testInfo: TestInfo, nome: string) {
+  try {
+    const imagem = await page.screenshot({ fullPage: true });
+    await testInfo.attach(nome, { body: imagem, contentType: 'image/png' });
+  } catch {
+    // se nem o print for possível (ex.: navegador fechou), não esconde o erro original
+  }
 }

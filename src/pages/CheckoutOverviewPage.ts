@@ -1,15 +1,14 @@
 import { Locator, Page } from '@playwright/test';
 import { BasePage } from './BasePage';
-import { CartItemComponent } from './CartItemComponent';
-import { OrderSummary } from '../data/types';
-import { parseMoneyToCents } from '../utils/money';
+import { ProductList } from '../components/ProductList';
+import { paraCentavos } from '../utils/money';
+import { Totais } from '../data/test-data';
 
 export class CheckoutOverviewPage extends BasePage {
-  protected readonly path = '/checkout-step-two.html';
+  protected readonly path = 'checkout-step-two.html';
+  protected readonly expectedTitle = 'Checkout: Overview';
 
-  readonly cartItems: CartItemComponent;
-  readonly paymentInfo: Locator;
-  readonly shippingInfo: Locator;
+  readonly products: ProductList;
   readonly itemTotalLabel: Locator;
   readonly taxLabel: Locator;
   readonly totalLabel: Locator;
@@ -17,27 +16,21 @@ export class CheckoutOverviewPage extends BasePage {
 
   constructor(page: Page) {
     super(page);
-    this.cartItems = new CartItemComponent(page);
-    this.paymentInfo = page.getByTestId('payment-info-value');
-    this.shippingInfo = page.getByTestId('shipping-info-value');
+    this.products = new ProductList(page);
     this.itemTotalLabel = page.getByTestId('subtotal-label');
     this.taxLabel = page.getByTestId('tax-label');
     this.totalLabel = page.getByTestId('total-label');
     this.finishButton = page.getByTestId('finish');
   }
 
-  async readSummary(): Promise<OrderSummary> {
-    return {
-      items: await this.cartItems.readAll(),
-      paymentInfo: (await this.paymentInfo.innerText()).trim(),
-      shippingInfo: (await this.shippingInfo.innerText()).trim(),
-      itemTotalCents: parseMoneyToCents(await this.itemTotalLabel.innerText()),
-      taxCents: parseMoneyToCents(await this.taxLabel.innerText()),
-      totalCents: parseMoneyToCents(await this.totalLabel.innerText()),
-    };
+  async lerTotais(): Promise<Totais> {
+    const itemTotal = paraCentavos(await this.itemTotalLabel.innerText());
+    const taxa = paraCentavos(await this.taxLabel.innerText());
+    const total = paraCentavos(await this.totalLabel.innerText());
+    return { itemTotal, taxa, total };
   }
 
-  async finish(): Promise<void> {
+  async finalizar() {
     await this.finishButton.click();
   }
 }

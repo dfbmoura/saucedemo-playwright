@@ -1,22 +1,21 @@
 import { Locator, Page } from '@playwright/test';
 import { BasePage } from './BasePage';
-import { CartItemComponent } from './CartItemComponent';
+import { ProductList } from '../components/ProductList';
 
 export class CartPage extends BasePage {
-  protected readonly path = '/cart.html';
+  protected readonly path = 'cart.html';
+  protected readonly expectedTitle = 'Your Cart';
 
-  readonly cartItems: CartItemComponent;
+  readonly products: ProductList;
   readonly checkoutButton: Locator;
-  readonly continueShoppingButton: Locator;
 
   constructor(page: Page) {
     super(page);
-    this.cartItems = new CartItemComponent(page);
+    this.products = new ProductList(page);
     this.checkoutButton = page.getByTestId('checkout');
-    this.continueShoppingButton = page.getByTestId('continue-shopping');
   }
 
-  async proceedToCheckout(): Promise<void> {
+  async irParaCheckout() {
     await this.checkoutButton.click();
   }
 }

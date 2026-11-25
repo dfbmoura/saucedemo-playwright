@@ -1,35 +1,25 @@
 import { expect, Page, TestInfo } from '@playwright/test';
+import { LoginPage } from '../pages/LoginPage';
+import { InventoryPage } from '../pages/InventoryPage';
+import { CartPage } from '../pages/CartPage';
+import { CheckoutInformationPage } from '../pages/CheckoutInformationPage';
+import { CheckoutOverviewPage } from '../pages/CheckoutOverviewPage';
+import { CheckoutCompletePage } from '../pages/CheckoutCompletePage';
+import { Cliente, Produto, Totais, testData } from '../data/test-data';
+import { keyword } from '../utils/evidence';
+import { paraCentavos, formatarCentavos } from '../utils/money';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-  CartPage,
-  CheckoutCompletePage,
-  CheckoutInformationPage,
-  CheckoutOverviewPage,
-  InventoryPage,
-  LoginPage,
-} from '../pages';
-import { Customer, OrderSummary, Product } from '../data/types';
-import { testData } from '../data/test-data';
-import { keyword } from '../utils/evidence';
-import { formatCents, sumCents } from '../utils/money';
-import { generateReceiptPdf } from '../utils/receipt-pdf';
+import { gerarPdf, montarHtmlComprovante } from '../utils/pdf';
 
-/**
- * Keywords customizadas de negócio.
- * Cada método é uma ação completa e reutilizável do fluxo de compra
- * (estilo Robot Framework), composta pelos Page Objects. Os testes
- * falam a linguagem do negócio; os Page Objects cuidam dos seletores.
- */
 export class PurchaseKeywords {
-  private loggedUser = '';
-
   private readonly loginPage: LoginPage;
   private readonly inventoryPage: InventoryPage;
   private readonly cartPage: CartPage;
   private readonly checkoutInfoPage: CheckoutInformationPage;
   private readonly overviewPage: CheckoutOverviewPage;
   private readonly completePage: CheckoutCompletePage;
+  private usuarioLogado = '';
 
   constructor(
     private readonly page: Page,
@@ -43,137 +33,121 @@ export class PurchaseKeywords {
     this.completePage = new CheckoutCompletePage(page);
   }
 
-  private run<T>(title: string, body: () => Promise<T>): Promise<T> {
-    return keyword(title, this.page, this.testInfo, body);
+  /** Atalho para não repetir page e testInfo em toda keyword. */
+  private passo<T>(titulo: string, acao: () => Promise<T>): Promise<T> {
+    return keyword(titulo, this.page, this.testInfo, acao);
   }
 
-  /** Faz login usando as credenciais exibidas na tela inicial. */
-  async loginWithDisplayedCredentials(username: string = testData.username): Promise<void> {
-    await this.run(`Realizar login com o usuário "${username}" exibido na tela`, async () => {
+  async loginComCredenciaisDaTela(usuario: string = testData.usuario) {
+    await this.passo(`Realizar login com "${usuario}" (credenciais da tela)`, async () => {
       await this.loginPage.goto();
-      const { usernames, password } = await this.loginPage.getDisplayedCredentials();
-      expect(usernames, 'O usuário deve estar listado na tela de login').toContain(username);
-
-      await this.loginPage.login({ username, password });
-      await expect(this.loginPage.errorMessage).toBeHidden();
-      this.loggedUser = username;
+      const credenciais = await this.loginPage.getDisplayedCredentials();
+      expect(credenciais.usuarios, 'Usuário deve estar listado na tela').toContain(usuario);
+      await this.loginPage.login(usuario, credenciais.senha);
+            this.usuarioLogado = usuario;
     });
   }
 
-  async validateProductsPage(): Promise<void> {
-    await this.run('Validar acesso à página de produtos', async () => {
-      await this.inventoryPage.expectLoaded(testData.messages.productsTitle);
-      await this.inventoryPage.expectProductsListed();
-      await this.inventoryPage.expectCartCount(0);
+  async validarPaginaDeProdutos() {
+    await this.passo('Validar acesso à página de produtos', async () => {
+      await this.inventoryPage.expectLoaded();
+      await expect(this.inventoryPage.cartBadge).toBeHidden();
     });
   }
 
-  /** Adiciona o produto ao carrinho e devolve nome/preço lidos da vitrine. */
-  async addProductToCart(productName: string): Promise<Product> {
-    return this.run(`Adicionar "${productName}" ao carrinho`, async () => {
-      const product = await this.inventoryPage.readProduct(productName);
-      await this.inventoryPage.addToCart(productName);
-      await this.inventoryPage.expectCartCount(1);
-      return product;
+  async adicionarAoCarrinho(nome: string): Promise<Produto> {
+    return this.passo(`Adicionar "${nome}" ao carrinho`, async () => {
+      const preco = await this.inventoryPage.products.priceOf(nome).innerText();
+      await this.inventoryPage.addToCart(nome);
+      await expect(this.inventoryPage.cartBadge).toHaveText('1');
+      return { nome, preco, quantidade: 1 };
     });
   }
 
-  /** Abre o carrinho e valida nome, quantidade e preço de cada item. */
-  async validateCart(expected: Product[]): Promise<void> {
-    await this.run('Validar nome, quantidade e preço no carrinho', async () => {
+  async validarCarrinho(produto: Produto) {
+    await this.passo('Validar nome, quantidade e preço no carrinho', async () => {
       await this.inventoryPage.openCart();
-      await this.cartPage.expectLoaded(testData.messages.cartTitle);
-      const cartItems = await this.cartPage.cartItems.readAll();
-      expect(cartItems, 'Itens do carrinho devem ser iguais aos selecionados').toEqual(expected);
+      await this.cartPage.expectLoaded();
+      const lista = this.cartPage.products;
+      await expect(lista.items).toHaveCount(1);
+      await expect(lista.nameOf(produto.nome)).toHaveText(produto.nome);
+      await expect(lista.quantityOf(produto.nome)).toHaveText(String(produto.quantidade));
+      await expect(lista.priceOf(produto.nome)).toHaveText(produto.preco);
     });
   }
 
-  async checkout(customer: Customer): Promise<void> {
-    await this.run('Realizar checkout (dados do cliente)', async () => {
-      await this.cartPage.proceedToCheckout();
-      await this.checkoutInfoPage.expectLoaded('Checkout: Your Information');
-      await this.checkoutInfoPage.fillCustomer(customer);
-      await this.checkoutInfoPage.continue();
-      await this.overviewPage.expectLoaded(testData.messages.overviewTitle);
+  async realizarCheckout(cliente: Cliente) {
+    await this.passo('Realizar checkout', async () => {
+      await this.cartPage.irParaCheckout();
+      await this.checkoutInfoPage.expectLoaded();
+      await this.checkoutInfoPage.preencherDados(cliente);
+      await this.checkoutInfoPage.continuar();
+      await this.overviewPage.expectLoaded();
     });
   }
 
-  /**
-   * Valida o resumo do pedido:
-   *  - itens do resumo = itens comprados (nome, quantidade e preço);
-   *  - "Item total" = soma dos preços dos produtos comprados;
-   *  - "Total" = Item total + Tax.
-   */
-  async validateOrderTotal(purchased: Product[]): Promise<OrderSummary> {
-    return this.run('Validar que o preço final corresponde ao que foi comprado', async () => {
-      const summary = await this.overviewPage.readSummary();
-      const expectedItemTotal = sumCents(purchased.map((p) => p.priceCents * p.quantity));
+  async validarPrecoFinal(produto: Produto) {
+    return this.passo('Validar que o preço final corresponde ao que foi comprado', async () => {
+      const lista = this.overviewPage.products;
+      await expect(lista.quantityOf(produto.nome)).toHaveText(String(produto.quantidade));
+      await expect(lista.priceOf(produto.nome)).toHaveText(produto.preco);
 
-      expect(summary.items, 'Itens do resumo').toEqual(purchased);
-      expect(
-        summary.itemTotalCents,
-        `Item total (${formatCents(summary.itemTotalCents)}) deve ser igual à soma comprada (${formatCents(expectedItemTotal)})`,
-      ).toBe(expectedItemTotal);
-      expect(
-        summary.totalCents,
-        `Total (${formatCents(summary.totalCents)}) deve ser Item total + Tax`,
-      ).toBe(summary.itemTotalCents + summary.taxCents);
+      const precoComprado = paraCentavos(produto.preco) * produto.quantidade;
+      const totais = await this.overviewPage.lerTotais();
 
-      await this.testInfo.attach('Resumo do pedido (JSON)', {
-        body: JSON.stringify(summary, null, 2),
-        contentType: 'application/json',
+      expect(totais.itemTotal,
+        `Item total (${formatarCentavos(totais.itemTotal)}) = preço comprado (${formatarCentavos(precoComprado)})`,
+      ).toBe(precoComprado);
+      expect(totais.total,
+        `Total (${formatarCentavos(totais.total)}) = Item total + Taxa`,
+      ).toBe(totais.itemTotal + totais.taxa);
+
+      return totais;
+    });
+  }
+
+  async finalizarEValidarConfirmacao() {
+    await this.passo('Finalizar compra e validar mensagem de confirmação', async () => {
+      await this.overviewPage.finalizar();
+      await this.completePage.expectLoaded();
+      await expect(this.completePage.completeHeader).toHaveText(testData.mensagens.confirmacaoTitulo);
+      await expect(this.completePage.completeText).toHaveText(testData.mensagens.confirmacaoTexto);
+      await expect(this.completePage.cartBadge).toBeHidden();
+    });
+  }
+  async gerarPdfDaCompra(produto: Produto, totais: Totais, cliente: Cliente): Promise<string> {
+    return this.passo('Gerar PDF da compra', async () => {
+      // 1. Onde salvar: reports/pdf/compra-<data-hora>.pdf
+      const carimbo = new Date().toISOString().replace(/[:.]/g, '-');
+      const pasta = path.resolve('reports', 'pdf');
+      fs.mkdirSync(pasta, { recursive: true });
+      const caminho = path.join(pasta, `compra-${carimbo}.pdf`);
+
+      // 2. Montar o comprovante com os dados da compra + print da tela de confirmação
+      const html = montarHtmlComprovante({
+        usuario: this.usuarioLogado,
+        cliente,
+        produto,
+        totais,
+        mensagem: await this.completePage.completeHeader.innerText(),
+        printConfirmacao: await this.page.screenshot({ fullPage: true }),
       });
-      return summary;
-    });
-  }
 
-  async finishAndValidateConfirmation(): Promise<{ header: string; text: string }> {
-    return this.run('Finalizar compra e validar mensagem de confirmação', async () => {
-      await this.overviewPage.finish();
-      await this.completePage.expectLoaded(testData.messages.completeTitle);
-      await expect(this.completePage.completeHeader).toHaveText(testData.messages.completeHeader);
-      await expect(this.completePage.completeText).toHaveText(testData.messages.completeText);
-      await this.completePage.expectCartCount(0);
-      return {
-        header: (await this.completePage.completeHeader.innerText()).trim(),
-        text: (await this.completePage.completeText.innerText()).trim(),
-      };
-    });
-  }
+      // 3. Gerar o PDF
+      const pdf = await gerarPdf(this.page.context(), html, caminho);
 
-  /** Gera o PDF do comprovante, salva em reports/pdf e anexa ao relatório. */
-  async generatePurchasePdf(
-    customer: Customer,
-    summary: OrderSummary,
-    confirmation: { header: string; text: string },
-  ): Promise<string> {
-    return this.run('Gerar PDF da compra', async () => {
-      const purchasedAt = new Date();
-      const stamp = purchasedAt.toISOString().replace(/[:.]/g, '-');
-      const orderId = `SD-${stamp}`;
-      const outputDir = path.resolve('reports', 'pdf');
-      fs.mkdirSync(outputDir, { recursive: true });
-      const outputPath = path.join(outputDir, `compra-${stamp}.pdf`);
+      // 4. Validar que o arquivo foi gerado e é um PDF de verdade
+      expect(fs.existsSync(caminho), 'Arquivo PDF deve existir').toBe(true);
+      expect(pdf.subarray(0, 5).toString(), 'Arquivo deve ser um PDF válido').toBe('%PDF-');
 
-      const pdf = await generateReceiptPdf(
-        this.page.context(),
-        {
-          orderId,
-          purchasedAt,
-          username: this.loggedUser,
-          customer,
-          summary,
-          confirmationHeader: confirmation.header,
-          confirmationText: confirmation.text,
-          confirmationScreenshot: await this.page.screenshot({ fullPage: true }),
-        },
-        outputPath,
-      );
+      // 5. Anexar o PDF ao relatório
+      await this.testInfo.attach('Comprovante da compra (PDF)', {
+        path: caminho,
+        contentType: 'application/pdf',
+      });
 
-      expect(fs.existsSync(outputPath), 'O PDF deve ser gerado em disco').toBe(true);
-      expect(pdf.subarray(0, 5).toString(), 'Arquivo gerado deve ser um PDF válido').toBe('%PDF-');
-      await this.testInfo.attach('Comprovante da compra (PDF)', { path: outputPath, contentType: 'application/pdf' });
-      return outputPath;
+      console.log(`PDF gerado em: ${caminho}`);
+      return caminho;
     });
   }
 }

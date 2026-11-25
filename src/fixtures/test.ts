@@ -1,17 +1,18 @@
 import { test as base } from '@playwright/test';
 import { PurchaseKeywords } from '../keywords/PurchaseKeywords';
 
-type Fixtures = {
-  purchase: PurchaseKeywords;
+type MinhasFixtures = {
+  compra: PurchaseKeywords;
 };
 
-/**
- * Fixture customizada: injeta as keywords já instanciadas em cada teste,
- * evitando "new" e setup repetido nos specs.
- */
-export const test = base.extend<Fixtures>({
-  purchase: async ({ page }, use, testInfo) => {
-    await use(new PurchaseKeywords(page, testInfo));
+export const test = base.extend<MinhasFixtures>({
+  compra: async ({ page }, use, testInfo) => {
+    // antes do teste (setup)
+    const keywords = new PurchaseKeywords(page, testInfo);
+
+    await use(keywords);   // o teste roda aqui
+
+    // depois do teste (teardown) - nada a limpar por enquanto
   },
 });
 

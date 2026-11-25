@@ -1,11 +1,9 @@
 import { expect, Locator, Page } from '@playwright/test';
-import { Credentials } from '../data/types';
 
 export class LoginPage {
   readonly usernameInput: Locator;
   readonly passwordInput: Locator;
   readonly loginButton: Locator;
-  readonly errorMessage: Locator;
   readonly acceptedUsernames: Locator;
   readonly passwordHint: Locator;
 
@@ -13,40 +11,34 @@ export class LoginPage {
     this.usernameInput = page.getByTestId('username');
     this.passwordInput = page.getByTestId('password');
     this.loginButton = page.getByTestId('login-button');
-    this.errorMessage = page.getByTestId('error');
     this.acceptedUsernames = page.getByTestId('login-credentials');
     this.passwordHint = page.getByTestId('login-password');
   }
 
-  async goto(): Promise<void> {
+  async goto() {
     await this.page.goto('/');
     await expect(this.loginButton).toBeVisible();
   }
 
-  /**
-   * Lê as credenciais exibidas na própria tela inicial
-   * ("Accepted usernames are:" / "Password for all users:"),
-   * em vez de deixá-las fixas no código.
-   */
-  async getDisplayedCredentials(): Promise<{ usernames: string[]; password: string }> {
-    const usernames = (await this.acceptedUsernames.innerText())
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line && !line.endsWith(':'));
+  /** Lê os usuários e a senha exibidos na parte de baixo da tela de login. */
+  async getDisplayedCredentials() {
+    const textoUsuarios = await this.acceptedUsernames.innerText();
+    const textoSenha = await this.passwordHint.innerText();
 
-    const password = (await this.passwordHint.innerText())
+    const usuarios = textoUsuarios
       .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line && !line.endsWith(':'))
-      .pop();
+      .map((linha) => linha.trim())
+      .filter((linha) => linha !== '' && !linha.endsWith(':'));
 
-    if (!usernames.length || !password) {
-      throw new Error('Não foi possível ler as credenciais exibidas na tela de login.');
-    }
-    return { usernames, password };
+    const senha = textoSenha
+      .split('\n')
+      .map((linha) => linha.trim())
+      .filter((linha) => linha !== '' && !linha.endsWith(':'))[0];
+
+    return { usuarios, senha };
   }
 
-  async login({ username, password }: Credentials): Promise<void> {
+  async login(username: string, password: string) {
     await this.usernameInput.fill(username);
     await this.passwordInput.fill(password);
     await this.loginButton.click();

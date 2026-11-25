@@ -1,9 +1,10 @@
 import { Locator, Page } from '@playwright/test';
 import { BasePage } from './BasePage';
-import { Customer } from '../data/types';
+import { Cliente } from '../data/test-data';
 
 export class CheckoutInformationPage extends BasePage {
-  protected readonly path = '/checkout-step-one.html';
+  protected readonly path = 'checkout-step-one.html';
+  protected readonly expectedTitle = 'Checkout: Your Information';
 
   readonly firstNameInput: Locator;
   readonly lastNameInput: Locator;
@@ -18,13 +19,13 @@ export class CheckoutInformationPage extends BasePage {
     this.continueButton = page.getByTestId('continue');
   }
 
-  async fillCustomer(customer: Customer): Promise<void> {
-    await this.firstNameInput.fill(customer.firstName);
-    await this.lastNameInput.fill(customer.lastName);
-    await this.postalCodeInput.fill(customer.postalCode);
+  async preencherDados(cliente: Cliente) {
+    await this.firstNameInput.fill(cliente.nome);
+    await this.lastNameInput.fill(cliente.sobrenome);
+    await this.postalCodeInput.fill(cliente.cep);
   }
 
-  async continue(): Promise<void> {
+  async continuar() {
     await this.continueButton.click();
   }
 }

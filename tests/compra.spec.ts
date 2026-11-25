@@ -2,17 +2,17 @@ import { test } from '../src/fixtures/test';
 import { testData } from '../src/data/test-data';
 
 test.describe('Fluxo de compra - SauceDemo', () => {
-  test('deve comprar um produto e gerar o comprovante em PDF', async ({ purchase }) => {
-    await purchase.loginWithDisplayedCredentials();
-    await purchase.validateProductsPage();
+  test('comprar um produto e gerar o comprovante em PDF', async ({ compra }) => {
+    await compra.loginComCredenciaisDaTela();
+    await compra.validarPaginaDeProdutos();
 
-    const product = await purchase.addProductToCart(testData.product);
-    await purchase.validateCart([product]);
+    const produto = await compra.adicionarAoCarrinho(testData.produto);
+    await compra.validarCarrinho(produto);
 
-    await purchase.checkout(testData.customer);
-    const summary = await purchase.validateOrderTotal([product]);
+    await compra.realizarCheckout(testData.cliente);
+    const totais = await compra.validarPrecoFinal(produto);
 
-    const confirmation = await purchase.finishAndValidateConfirmation();
-    await purchase.generatePurchasePdf(testData.customer, summary, confirmation);
+    await compra.finalizarEValidarConfirmacao();
+    await compra.gerarPdfDaCompra(produto, totais, testData.cliente);
   });
 });

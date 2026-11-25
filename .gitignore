@@ -1,6 +1,10 @@
+# Dependências
 node_modules/
-test-results/
-reports/
-blob-report/
-playwright/.cache/
-.env
+
+# Resultados de execução (gerados a cada run)
+/test-results/
+/playwright-report/
+/reports/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
